@@ -77,10 +77,10 @@ type slackResponse struct {
 }
 
 type axEvent struct {
-	Type     string      `json:"type"`
-	Message  string      `json:"message"`
-	Outcome  string      `json:"outcome"`
-	Messages []axMessage `json:"messages"`
+	Type     string          `json:"type"`
+	Message  json.RawMessage `json:"message"`
+	Outcome  string          `json:"outcome"`
+	Messages []axMessage     `json:"messages"`
 }
 
 type axMessage struct {
@@ -322,7 +322,9 @@ func runAX(cfg config, j job) (string, error) {
 		case "result":
 			result = event.Messages
 		case "error":
-			eventError = event.Message
+			if err := json.Unmarshal(event.Message, &eventError); err != nil {
+				eventError = string(event.Message)
+			}
 		case "done":
 			outcome = event.Outcome
 		}

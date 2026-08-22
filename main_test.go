@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -45,6 +46,13 @@ func TestParseJobRejectsUnsafePath(t *testing.T) {
 	data := []byte(`{"team_id":"..","event":{"type":"app_mention","channel":"C1","text":"hello","ts":"1.1"}}`)
 	if _, ok := parseJob(data); ok {
 		t.Fatal("unsafe event was accepted")
+	}
+}
+
+func TestAXEventAcceptsMessageObject(t *testing.T) {
+	var event axEvent
+	if err := json.Unmarshal([]byte(`{"type":"message","message":{"Role":"assistant","Content":"done"}}`), &event); err != nil {
+		t.Fatal(err)
 	}
 }
 
