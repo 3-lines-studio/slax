@@ -64,6 +64,20 @@ func TestFormatMarkdownPreservesCode(t *testing.T) {
 	}
 }
 
+func TestSplitMessageUsesParagraphs(t *testing.T) {
+	parts := splitMessage("first paragraph\n\nsecond paragraph", 20)
+	if len(parts) != 2 || parts[0] != "first paragraph" || parts[1] != "second paragraph" {
+		t.Fatalf("unexpected parts: %#v", parts)
+	}
+}
+
+func TestSplitMessageHandlesUnicode(t *testing.T) {
+	parts := splitMessage("😀😀😀😀😀", 3)
+	if len(parts) != 2 || parts[0] != "😀😀😀" || parts[1] != "😀😀" {
+		t.Fatalf("unexpected parts: %#v", parts)
+	}
+}
+
 func TestAXEventAcceptsMessageObject(t *testing.T) {
 	var event axEvent
 	if err := json.Unmarshal([]byte(`{"type":"message","message":{"Role":"assistant","Content":"done"}}`), &event); err != nil {

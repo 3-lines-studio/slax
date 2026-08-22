@@ -286,14 +286,21 @@ func work(cfg config, jobs <-chan job) {
 			log.Printf("ax: %v", err)
 			reply = "AX failed: " + err.Error()
 		}
-		reply = formatMarkdown(reply)
+		parts := splitMessage(formatMarkdown(reply), 3500)
 		if messageTS != "" {
-			err = updateMessage(cfg, j.channel, messageTS, reply)
+			err = updateMessage(cfg, j.channel, messageTS, parts[0])
 		} else {
-			_, err = postMessage(cfg, j, reply)
+			_, err = postMessage(cfg, j, parts[0])
 		}
 		if err != nil {
 			log.Printf("reply: %v", err)
+			continue
+		}
+		for _, part := range parts[1:] {
+			if _, err := postMessage(cfg, j, part); err != nil {
+				log.Printf("reply: %v", err)
+				break
+			}
 		}
 	}
 }
@@ -472,6 +479,46 @@ func formatTable(rows [][]string) string {
 		}
 	}
 	return "```\n" + strings.Join(lines, "\n") + "\n```"
+}
+
+func splitMessage(text string, limit int) []string {
+	if len([]rune(text)) <= limit {
+		return []string{text}
+	}
+	blocks := strings.Split(text, "\n\n")
+	var parts []string
+	current := ""
+	for _, block := range blocks {
+		separator := ""
+		if current != "" {
+			separator = "\n\n"
+		}
+		if len([]rune(current+separator+block)) <= limit {
+			current += separator + block
+			continue
+		}
+		if current != "" {
+			parts = append(parts, current)
+			current = ""
+		}
+		for len([]rune(block)) > limit {
+			runes := []rune(block)
+			cut := limit
+			for cut > limit/2 && runes[cut] != '\n' {
+				cut--
+			}
+			if cut == limit/2 {
+				cut = limit
+			}
+			parts = append(parts, strings.TrimSpace(string(runes[:cut])))
+			block = strings.TrimSpace(string(runes[cut:]))
+		}
+		current = block
+	}
+	if current != "" {
+		parts = append(parts, current)
+	}
+	return parts
 }
 
 func postMessage(cfg config, j job, text string) (string, error) {
