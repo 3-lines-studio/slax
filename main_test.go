@@ -49,6 +49,21 @@ func TestParseJobRejectsUnsafePath(t *testing.T) {
 	}
 }
 
+func TestFormatMarkdown(t *testing.T) {
+	input := "# Results\n\n| Name | Total |\n| --- | ---: |\n| Alpha | 12 |\n| Longer | 3 |\n\n**Done**: [details](https://example.com)"
+	want := "*Results*\n\n```\n| Name   | Total |\n|--------|-------|\n| Alpha  | 12    |\n| Longer | 3     |\n```\n\n*Done*: <https://example.com|details>"
+	if got := formatMarkdown(input); got != want {
+		t.Fatalf("got:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+func TestFormatMarkdownPreservesCode(t *testing.T) {
+	input := "```markdown\n# title\n**bold**\n```"
+	if got := formatMarkdown(input); got != input {
+		t.Fatalf("got %q, want %q", got, input)
+	}
+}
+
 func TestAXEventAcceptsMessageObject(t *testing.T) {
 	var event axEvent
 	if err := json.Unmarshal([]byte(`{"type":"message","message":{"Role":"assistant","Content":"done"}}`), &event); err != nil {

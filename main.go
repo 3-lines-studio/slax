@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -73,6 +74,7 @@ type job struct {
 
 type slackResponse struct {
 	OK    bool   `json:"ok"`
+	TS    string `json:"ts"`
 	Error string `json:"error"`
 }
 
@@ -88,6 +90,12 @@ type axMessage struct {
 	Content   string          `json:"Content"`
 	ToolCalls json.RawMessage `json:"ToolCalls"`
 }
+
+var markdownLink = regexp.MustCompile(`\[([^]]+)\]\((https?://[^ )]+)\)`)
+var markdownBold = regexp.MustCompile(`\*\*([^*]+)\*\*`)
+var markdownUnderlineBold = regexp.MustCompile(`__([^_]+)__`)
+var markdownStrike = regexp.MustCompile(`~~([^~]+)~~`)
+var tableDelimiter = regexp.MustCompile(`^:?-{3,}:?$`)
 
 func main() {
 	cfg, err := loadConfig()
@@ -269,12 +277,22 @@ func safePart(value string) bool {
 
 func work(cfg config, jobs <-chan job) {
 	for j := range jobs {
+		messageTS, err := postMessage(cfg, j, "Working…")
+		if err != nil {
+			log.Printf("progress: %v", err)
+		}
 		reply, err := runAX(cfg, j)
 		if err != nil {
 			log.Printf("ax: %v", err)
 			reply = "AX failed: " + err.Error()
 		}
-		if err := postMessage(cfg, j, reply); err != nil {
+		reply = formatMarkdown(reply)
+		if messageTS != "" {
+			err = updateMessage(cfg, j.channel, messageTS, reply)
+		} else {
+			_, err = postMessage(cfg, j, reply)
+		}
+		if err != nil {
 			log.Printf("reply: %v", err)
 		}
 	}
@@ -356,29 +374,144 @@ func runAX(cfg config, j job) (string, error) {
 	return "", errors.New("ax returned an empty response")
 }
 
-func postMessage(cfg config, j job, text string) error {
+func formatMarkdown(text string) string {
+	lines := strings.Split(strings.TrimSpace(text), "\n")
+	var output []string
+	inCode := false
+	for i := 0; i < len(lines); {
+		line := lines[i]
+		if strings.HasPrefix(strings.TrimSpace(line), "```") {
+			inCode = !inCode
+			output = append(output, line)
+			i++
+			continue
+		}
+		if !inCode && i+1 < len(lines) && isTableDelimiter(lines[i+1]) {
+			table := [][]string{splitTable(line)}
+			i += 2
+			for i < len(lines) {
+				row := splitTable(lines[i])
+				if len(row) != len(table[0]) {
+					break
+				}
+				table = append(table, row)
+				i++
+			}
+			output = append(output, formatTable(table))
+			continue
+		}
+		if !inCode {
+			line = formatLine(line)
+		}
+		output = append(output, line)
+		i++
+	}
+	return strings.Join(output, "\n")
+}
+
+func formatLine(line string) string {
+	trimmed := strings.TrimLeft(line, " ")
+	if strings.HasPrefix(trimmed, "#") {
+		title := strings.TrimSpace(strings.TrimLeft(trimmed, "#"))
+		if title != "" {
+			line = "*" + title + "*"
+		}
+	}
+	line = markdownLink.ReplaceAllString(line, `<$2|$1>`)
+	line = markdownBold.ReplaceAllString(line, `*$1*`)
+	line = markdownUnderlineBold.ReplaceAllString(line, `*$1*`)
+	line = markdownStrike.ReplaceAllString(line, `~$1~`)
+	return line
+}
+
+func isTableDelimiter(line string) bool {
+	cells := splitTable(line)
+	if len(cells) < 2 {
+		return false
+	}
+	for _, cell := range cells {
+		cell = strings.TrimSpace(cell)
+		if !tableDelimiter.MatchString(cell) {
+			return false
+		}
+	}
+	return true
+}
+
+func splitTable(line string) []string {
+	line = strings.TrimSpace(line)
+	line = strings.TrimPrefix(line, "|")
+	line = strings.TrimSuffix(line, "|")
+	parts := strings.Split(line, "|")
+	for i := range parts {
+		parts[i] = strings.TrimSpace(parts[i])
+	}
+	return parts
+}
+
+func formatTable(rows [][]string) string {
+	widths := make([]int, len(rows[0]))
+	for _, row := range rows {
+		for i, cell := range row {
+			widths[i] = max(widths[i], len([]rune(cell)))
+		}
+	}
+	var lines []string
+	for rowIndex, row := range rows {
+		cells := make([]string, len(row))
+		for i, cell := range row {
+			cells[i] = cell + strings.Repeat(" ", widths[i]-len([]rune(cell)))
+		}
+		lines = append(lines, "| "+strings.Join(cells, " | ")+" |")
+		if rowIndex == 0 {
+			separators := make([]string, len(widths))
+			for i, width := range widths {
+				separators[i] = strings.Repeat("-", width)
+			}
+			lines = append(lines, "|-"+strings.Join(separators, "-|-")+"-|")
+		}
+	}
+	return "```\n" + strings.Join(lines, "\n") + "\n```"
+}
+
+func postMessage(cfg config, j job, text string) (string, error) {
 	form := url.Values{
 		"channel":   {j.channel},
 		"thread_ts": {j.threadTS},
 		"text":      {text},
 	}
-	req, err := http.NewRequest(http.MethodPost, "https://slack.com/api/chat.postMessage", strings.NewReader(form.Encode()))
+	result, err := slackAPI(cfg, "chat.postMessage", form)
+	return result.TS, err
+}
+
+func updateMessage(cfg config, channel, ts, text string) error {
+	form := url.Values{
+		"channel": {channel},
+		"ts":      {ts},
+		"text":    {text},
+	}
+	_, err := slackAPI(cfg, "chat.update", form)
+	return err
+}
+
+func slackAPI(cfg config, method string, form url.Values) (slackResponse, error) {
+	var result slackResponse
+	req, err := http.NewRequest(http.MethodPost, "https://slack.com/api/"+method, strings.NewReader(form.Encode()))
 	if err != nil {
-		return err
+		return result, err
 	}
 	req.Header.Set("Authorization", "Bearer "+cfg.botToken)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return err
+		return result, err
 	}
 	defer resp.Body.Close()
-	var result slackResponse
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&result); err != nil {
-		return err
+		return result, err
 	}
 	if !result.OK {
-		return errors.New(result.Error)
+		return result, errors.New(result.Error)
 	}
-	return nil
+	return result, nil
 }
