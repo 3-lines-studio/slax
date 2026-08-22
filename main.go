@@ -70,6 +70,19 @@ type slackResponse struct {
 	Error string `json:"error"`
 }
 
+type axEvent struct {
+	Type     string      `json:"type"`
+	Message  string      `json:"message"`
+	Outcome  string      `json:"outcome"`
+	Messages []axMessage `json:"messages"`
+}
+
+type axMessage struct {
+	Role      string          `json:"Role"`
+	Content   string          `json:"Content"`
+	ToolCalls json.RawMessage `json:"ToolCalls"`
+}
+
 func main() {
 	cfg, err := loadConfig()
 	if err != nil {
@@ -244,23 +257,64 @@ func work(cfg config, jobs <-chan job) {
 
 func runAX(cfg config, j job) (string, error) {
 	session := filepath.Join(cfg.sessions, j.teamID, j.channel, j.threadTS+".jsonl")
-	cmd := exec.Command(cfg.axPath, "--session", session, "-C", cfg.workdir, j.prompt)
-	var stdout bytes.Buffer
+	cmd := exec.Command(cfg.axPath, "--events", "--session", session, "-C", cfg.workdir, j.prompt)
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return "", err
+	}
 	var stderr bytes.Buffer
-	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
+	if err := cmd.Start(); err != nil {
+		return "", err
+	}
+	decoder := json.NewDecoder(stdout)
+	var result []axMessage
+	var eventError string
+	var outcome string
+	for {
+		var event axEvent
+		err := decoder.Decode(&event)
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			_ = cmd.Wait()
+			return "", fmt.Errorf("decode AX event: %w", err)
+		}
+		switch event.Type {
+		case "result":
+			result = event.Messages
+		case "error":
+			eventError = event.Message
+		case "done":
+			outcome = event.Outcome
+		}
+	}
+	waitErr := cmd.Wait()
+	if eventError != "" {
+		return "", errors.New(eventError)
+	}
+	if waitErr != nil || outcome != "done" {
 		message := strings.TrimSpace(stderr.String())
+		if message == "" && waitErr != nil {
+			message = waitErr.Error()
+		}
 		if message == "" {
-			message = err.Error()
+			message = "AX ended with " + outcome
 		}
 		return "", errors.New(message)
 	}
-	reply := strings.TrimSpace(stdout.String())
-	if reply == "" {
-		return "", errors.New("ax returned an empty response")
+	for i := len(result) - 1; i >= 0; i-- {
+		message := result[i]
+		if message.Role != "assistant" || strings.TrimSpace(message.Content) == "" {
+			continue
+		}
+		if len(message.ToolCalls) > 0 && string(message.ToolCalls) != "null" && string(message.ToolCalls) != "[]" {
+			continue
+		}
+		return strings.TrimSpace(message.Content), nil
 	}
-	return reply, nil
+	return "", errors.New("ax returned an empty response")
 }
 
 func postMessage(cfg config, j job, text string) error {

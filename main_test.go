@@ -39,7 +39,8 @@ func TestRunAXUsesThreadSession(t *testing.T) {
 	}
 	dir := t.TempDir()
 	ax := filepath.Join(dir, "ax")
-	script := "#!/bin/sh\nprintf '%s\\n' \"$*\"\n"
+	args := filepath.Join(dir, "args")
+	script := "#!/bin/sh\nprintf '%s' \"$*\" > " + args + "\nprintf '%s\\n' '{\"type\":\"result\",\"messages\":[{\"Role\":\"assistant\",\"Content\":\"done\"}]}' '{\"type\":\"done\",\"outcome\":\"done\"}'\n"
 	if err := os.WriteFile(ax, []byte(script), 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -48,8 +49,15 @@ func TestRunAXUsesThreadSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := "--session " + filepath.Join(dir, "sessions", "T1", "C1", "1.1.jsonl") + " -C /work fix it"
-	if reply != want {
-		t.Fatalf("got %q, want %q", reply, want)
+	if reply != "done" {
+		t.Fatalf("unexpected reply: %q", reply)
+	}
+	got, err := os.ReadFile(args)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "--events --session " + filepath.Join(dir, "sessions", "T1", "C1", "1.1.jsonl") + " -C /work fix it"
+	if string(got) != want {
+		t.Fatalf("got %q, want %q", got, want)
 	}
 }
