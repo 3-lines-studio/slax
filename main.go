@@ -25,6 +25,9 @@ type config struct {
 	axPath   string
 	workdir  string
 	sessions string
+	model    string
+	baseURL  string
+	system   string
 }
 
 type socketOpen struct {
@@ -47,11 +50,14 @@ type eventPayload struct {
 }
 
 type slackEvent struct {
-	Type     string `json:"type"`
-	Channel  string `json:"channel"`
-	Text     string `json:"text"`
-	TS       string `json:"ts"`
-	ThreadTS string `json:"thread_ts"`
+	Type        string `json:"type"`
+	Channel     string `json:"channel"`
+	ChannelType string `json:"channel_type"`
+	Text        string `json:"text"`
+	TS          string `json:"ts"`
+	ThreadTS    string `json:"thread_ts"`
+	Subtype     string `json:"subtype"`
+	BotID       string `json:"bot_id"`
 }
 
 type authorization struct {
@@ -105,6 +111,8 @@ func loadConfig() (config, error) {
 		botToken: os.Getenv("SLACK_BOT_TOKEN"),
 		axPath:   os.Getenv("SLAX_AX_PATH"),
 		workdir:  os.Getenv("SLAX_WORKDIR"),
+		model:    os.Getenv("SLAX_MODEL"),
+		baseURL:  os.Getenv("SLAX_BASE_URL"),
 	}
 	if cfg.appToken == "" {
 		return cfg, errors.New("SLACK_APP_TOKEN is required")
@@ -126,11 +134,22 @@ func loadConfig() (config, error) {
 			return cfg, fmt.Errorf("working directory: %w", err)
 		}
 	}
-	root, err := os.UserConfigDir()
-	if err != nil {
-		return cfg, fmt.Errorf("config directory: %w", err)
+	systemFile := os.Getenv("SLAX_SYSTEM_FILE")
+	if systemFile != "" {
+		data, err := os.ReadFile(systemFile)
+		if err != nil {
+			return cfg, fmt.Errorf("read system prompt: %w", err)
+		}
+		cfg.system = strings.TrimSpace(string(data))
 	}
-	cfg.sessions = filepath.Join(root, "slax", "sessions")
+	cfg.sessions = os.Getenv("SLAX_SESSION_DIR")
+	if cfg.sessions == "" {
+		root, err := os.UserConfigDir()
+		if err != nil {
+			return cfg, fmt.Errorf("config directory: %w", err)
+		}
+		cfg.sessions = filepath.Join(root, "slax", "sessions")
+	}
 	return cfg, nil
 }
 
@@ -208,7 +227,13 @@ func openSocket(ctx context.Context, cfg config) (string, error) {
 
 func parseJob(data []byte) (job, bool) {
 	var payload eventPayload
-	if json.Unmarshal(data, &payload) != nil || payload.Event.Type != "app_mention" {
+	if json.Unmarshal(data, &payload) != nil {
+		return job{}, false
+	}
+	event := payload.Event
+	isMention := event.Type == "app_mention"
+	isDM := event.Type == "message" && event.ChannelType == "im" && event.Subtype == "" && event.BotID == ""
+	if !isMention && !isDM {
 		return job{}, false
 	}
 	threadTS := payload.Event.ThreadTS
@@ -257,7 +282,19 @@ func work(cfg config, jobs <-chan job) {
 
 func runAX(cfg config, j job) (string, error) {
 	session := filepath.Join(cfg.sessions, j.teamID, j.channel, j.threadTS+".jsonl")
-	cmd := exec.Command(cfg.axPath, "--events", "--session", session, "-C", cfg.workdir, j.prompt)
+	args := []string{"--events", "--session", session, "-C", cfg.workdir}
+	if cfg.baseURL != "" {
+		args = append(args, "-base", cfg.baseURL)
+	}
+	if cfg.model != "" {
+		args = append(args, "-model", cfg.model)
+	}
+	if cfg.system != "" {
+		args = append(args, "-system", cfg.system)
+	}
+	args = append(args, j.prompt)
+	cmd := exec.Command(cfg.axPath, args...)
+	cmd.Env = append(os.Environ(), "AX_SLACK_CHANNEL="+j.channel, "AX_SLACK_THREAD="+j.threadTS)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return "", err
