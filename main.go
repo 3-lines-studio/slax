@@ -12,9 +12,11 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/coder/websocket"
@@ -102,13 +104,18 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 	jobs := make(chan job, 64)
 	seen := make(map[string]struct{})
 	go work(cfg, jobs)
-	for {
-		if err := serve(cfg, jobs, seen); err != nil {
+	for ctx.Err() == nil {
+		if err := serve(ctx, cfg, jobs, seen); err != nil && ctx.Err() == nil {
 			log.Printf("slack: %v", err)
-			time.Sleep(time.Second)
+		}
+		select {
+		case <-ctx.Done():
+		case <-time.After(time.Second):
 		}
 	}
 }
@@ -161,8 +168,7 @@ func loadConfig() (config, error) {
 	return cfg, nil
 }
 
-func serve(cfg config, jobs chan<- job, seen map[string]struct{}) error {
-	ctx := context.Background()
+func serve(ctx context.Context, cfg config, jobs chan<- job, seen map[string]struct{}) error {
 	socketURL, err := openSocket(ctx, cfg)
 	if err != nil {
 		return err
