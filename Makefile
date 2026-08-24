@@ -1,5 +1,5 @@
 GO = go
-OUTPUT ?= slax
+OUTPUT ?= slaxi
 LDFLAGS = -s -w -buildid=
 GCFLAGS = all=-l
 

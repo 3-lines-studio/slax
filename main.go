@@ -124,10 +124,10 @@ func loadConfig() (config, error) {
 	cfg := config{
 		appToken: os.Getenv("SLACK_APP_TOKEN"),
 		botToken: os.Getenv("SLACK_BOT_TOKEN"),
-		axPath:   os.Getenv("SLAX_AX_PATH"),
-		workdir:  os.Getenv("SLAX_WORKDIR"),
-		model:    os.Getenv("SLAX_MODEL"),
-		baseURL:  os.Getenv("SLAX_BASE_URL"),
+		axPath:   os.Getenv("SLAXI_AX_PATH"),
+		workdir:  os.Getenv("SLAXI_WORKDIR"),
+		model:    os.Getenv("SLAXI_MODEL"),
+		baseURL:  os.Getenv("SLAXI_BASE_URL"),
 	}
 	if cfg.appToken == "" {
 		return cfg, errors.New("SLACK_APP_TOKEN is required")
@@ -149,7 +149,7 @@ func loadConfig() (config, error) {
 			return cfg, fmt.Errorf("working directory: %w", err)
 		}
 	}
-	systemFile := os.Getenv("SLAX_SYSTEM_FILE")
+	systemFile := os.Getenv("SLAXI_SYSTEM_FILE")
 	if systemFile != "" {
 		data, err := os.ReadFile(systemFile)
 		if err != nil {
@@ -157,13 +157,13 @@ func loadConfig() (config, error) {
 		}
 		cfg.system = strings.TrimSpace(string(data))
 	}
-	cfg.sessions = os.Getenv("SLAX_SESSION_DIR")
+	cfg.sessions = os.Getenv("SLAXI_SESSION_DIR")
 	if cfg.sessions == "" {
 		root, err := os.UserConfigDir()
 		if err != nil {
 			return cfg, fmt.Errorf("config directory: %w", err)
 		}
-		cfg.sessions = filepath.Join(root, "slax", "sessions")
+		cfg.sessions = filepath.Join(root, "slaxi", "sessions")
 	}
 	return cfg, nil
 }

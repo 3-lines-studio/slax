@@ -20,7 +20,7 @@ jobs:
       - run: scripts/package.sh
       - run: |
           cd dist
-          gh release create "$GITHUB_REF_NAME" slax-* SHA256SUMS \
+          gh release create "$GITHUB_REF_NAME" slaxi-* SHA256SUMS \
             --repo "$GITHUB_REPOSITORY" --generate-notes
         env:
           GH_TOKEN: ${{ github.token }}

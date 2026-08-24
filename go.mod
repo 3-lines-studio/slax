@@ -1,4 +1,4 @@
-module github.com/3-lines-studio/slax
+module github.com/3-lines-studio/slaxi
 
 go 1.27.0
 

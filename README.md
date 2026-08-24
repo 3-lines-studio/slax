@@ -1,4 +1,4 @@
-# slax
+# slaxi
 
 A small Slack adapter for [AX](https://github.com/3-lines-studio/ax).
 Each Slack thread maps to one persistent AX session.
@@ -15,23 +15,23 @@ Each Slack thread maps to one persistent AX session.
 ```sh
 SLACK_APP_TOKEN=xapp-... \
 SLACK_BOT_TOKEN=xoxb-... \
-SLAX_WORKDIR=/path/to/project \
-slax
+SLAXI_WORKDIR=/path/to/project \
+slaxi
 ```
 
 Optional:
 
 ```sh
-SLAX_AX_PATH=/path/to/ax
-SLAX_BASE_URL=https://api.deepseek.com
-SLAX_MODEL=deepseek-v4-flash
-SLAX_SYSTEM_FILE=/path/to/prompt.md
-SLAX_SESSION_DIR=/path/to/sessions
+SLAXI_AX_PATH=/path/to/ax
+SLAXI_BASE_URL=https://api.deepseek.com
+SLAXI_MODEL=deepseek-v4-flash
+SLAXI_SYSTEM_FILE=/path/to/prompt.md
+SLAXI_SESSION_DIR=/path/to/sessions
 ```
 
-Slax passes `AX_SLACK_CHANNEL` and `AX_SLACK_THREAD` to AX tool processes.
+Slaxi passes `AX_SLACK_CHANNEL` and `AX_SLACK_THREAD` to AX tool processes.
 
-Sessions are stored under `~/.config/slax/sessions` or the platform config directory. Slax processes one AX request at a time.
+Sessions are stored under `~/.config/slaxi/sessions` or the platform config directory. Slaxi processes one AX request at a time.
 
 ## Build and test
 

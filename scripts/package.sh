@@ -25,8 +25,8 @@ build() {
     os=$1
     arch=$2
     target=$3
-    CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" go build -trimpath -ldflags="-s -w" -o "dist/slax-$target" .
-    checksum "dist/slax-$target" > "dist/slax-$target.sha256"
+    CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" go build -trimpath -ldflags="-s -w" -o "dist/slaxi-$target" .
+    checksum "dist/slaxi-$target" > "dist/slaxi-$target.sha256"
 }
 
 build linux amd64 linux-x86_64
@@ -34,4 +34,4 @@ build linux arm64 linux-aarch64
 build darwin arm64 darwin-aarch64
 
 cd dist
-checksum slax-linux-x86_64 slax-linux-aarch64 slax-darwin-aarch64 > SHA256SUMS
+checksum slaxi-linux-x86_64 slaxi-linux-aarch64 slaxi-darwin-aarch64 > SHA256SUMS
