@@ -1,5 +1,7 @@
 # Slaxi
 
+<p align="center"><img src=".github/ax.svg" width="96" height="96" alt="AX ecosystem"></p>
+
 Slack interface for AX through Axis. Each Slack thread maps to one persistent Axis session.
 
 ## Requirements
