@@ -1,16 +1,34 @@
-# slaxi
+# Slaxi
 
-A small Slack adapter for [AX](https://github.com/3-lines-studio/ax).
-Each Slack thread maps to one persistent AX session.
+Slack interface for AX through Axis. Each Slack thread maps to one persistent Axis session.
 
 ## Requirements
 
-- `ax` in `PATH` with `--session` support
+- Axis and Slaxi in `PATH`
 - a Slack app with Socket Mode enabled
-- `app_mentions:read`, `im:history`, and `chat:write` bot scopes
+- `app_mentions:read`, `im:history`, `chat:write`, and `files:write` bot scopes
 - `app_mention` and `message.im` event subscriptions
 
-## Run
+## Axis mode
+
+```sh
+export SLACK_APP_TOKEN=xapp-...
+export SLACK_BOT_TOKEN=xoxb-...
+export SLAXI_AXIS_URL=http://127.0.0.1:8081
+export SLAXI_AXIS_USERNAME=axi
+export SLAXI_AXIS_PASSWORD=secret
+export SLAXI_BOT_ID=alfred
+export SLAXI_PROJECT_ID=alfred
+slaxi
+```
+
+Slaxi creates Axis sessions, streams responses, and uploads Axis artifact events to the originating Slack thread. When Axis supervises Slaxi, connector definitions provide the bot and project while `~/.config/axis/connectors/<connector-id>.env` provides the Slack tokens.
+
+Thread mappings are stored under `~/.config/slaxi/sessions` by default. Set `SLAXI_SESSION_DIR` to change it.
+
+## Legacy direct mode
+
+Without `SLAXI_AXIS_URL`, Slaxi retains its direct AX subprocess mode:
 
 ```sh
 SLACK_APP_TOKEN=xapp-... \
@@ -19,23 +37,17 @@ SLAXI_WORKDIR=/path/to/project \
 slaxi
 ```
 
-Optional:
+Optional direct-mode variables:
 
-```sh
-SLAXI_AX_PATH=/path/to/ax
-SLAXI_BASE_URL=https://api.deepseek.com
-SLAXI_MODEL=deepseek-v4-flash
-SLAXI_SYSTEM_FILE=/path/to/prompt.md
-SLAXI_SESSION_DIR=/path/to/sessions
+```text
+SLAXI_AX_PATH
+SLAXI_BASE_URL
+SLAXI_MODEL
+SLAXI_SYSTEM_FILE
 ```
 
-Slaxi passes `AX_SLACK_CHANNEL` and `AX_SLACK_THREAD` to AX tool processes.
-
-Sessions are stored under `~/.config/slaxi/sessions` or the platform config directory. Slaxi processes one AX request at a time.
-
-## Build and test
+## Test
 
 ```sh
 go test ./...
-go build ./...
 ```
